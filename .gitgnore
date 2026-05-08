@@ -1,0 +1,39 @@
+# Данные датасета (скачиваются через prepare_data.py)
+data/
+
+# Результаты обучения (модели, логи, чекпоинты)
+run/
+
+# Сгенерированные файлы (аудио, графики, метрики)
+output/
+
+# Автогенерированное Coqui TTS
+third_party/
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Виртуальное окружение
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Временные файлы поиска моделей (не нужны в репо)
+tts_models_search*.json
+*.tmp
+*.bak
+*.swp

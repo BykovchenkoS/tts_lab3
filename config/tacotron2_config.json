@@ -1,0 +1,71 @@
+{
+    "model": "tacotron2",
+
+    "audio": {
+        "sampling_rate": 22050,
+        "hop_length": 256,
+        "win_length": 1024,
+        "n_fft": 1024,
+        "n_mels": 80,
+        "mel_fmin": 0.0,
+        "mel_fmax": 8000.0
+    },
+
+    "text": {
+        "symbols": [
+            " ", "!", ",", ".", "?", "-", ":", ";", "'", "\"",
+            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+            "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+            "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+            "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"
+        ],
+        "text_cleaners": ["english_cleaners"]
+    },
+
+    "training": {
+        "batch_size": 32,
+        "epochs": 1500,
+        "learning_rate": 1e-3,
+        "weight_decay": 1e-6,
+        "grad_clip_thresh": 1.0,
+        "seed": 1234,
+
+        "lr_scheduler": {
+            "type": "noam",
+            "warmup_steps": 4000,
+            "model_dim": 512,
+            "factor": 1.0
+        },
+
+        "loss": {
+            "mel_loss_weight": 1.0,
+            "stop_loss_weight": 2.0,
+            "guidance_attention_weight": 0.0
+        }
+    },
+
+    "model_params": {
+        "encoder_embedding_dim": 512,
+        "encoder_n_conv_layers": 3,
+        "encoder_kernel_size": 5,
+        "attention_dim": 128,
+        "attention_rnn_dim": 1024,
+        "attention_location_n_filters": 32,
+        "attention_location_kernel_size": 31,
+        "decoder_rnn_dim": 1024,
+        "prenet_dim": 256,
+        "prenet_n_layers": 2,
+        "max_decoder_steps": 2000,
+        "gate_threshold": 0.5,
+        "p_attention_dropout": 0.1,
+        "p_decoder_dropout": 0.1,
+        "decoder_no_early_stopping": false
+    },
+
+    "paths": {
+        "data_root": "data/raw/LJSpeech-1.1",
+        "output_dir": "data/generated/tacotron2",
+        "log_dir": "logs/tacotron2",
+        "checkpoint_dir": "logs/tacotron2/checkpoints"
+    }
+}

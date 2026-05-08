@@ -1,0 +1,53 @@
+{
+    "model": "vits",
+
+    "audio": {
+        "sampling_rate": 22050,
+        "hop_length": 256,
+        "win_length": 1024,
+        "n_fft": 1024,
+        "n_mels": 80,
+        "mel_fmin": 0.0,
+        "mel_fmax": 8000.0
+    },
+
+    "training": {
+        "batch_size": 32,
+        "epochs": 1000,
+        "learning_rate": 1e-4,
+        "weight_decay": 0.0,
+        "grad_clip": 0.0,
+        "seed": 1234,
+        "lr_scheduler": {
+            "type": "exponential",
+            "gamma": 0.999875,
+            "min_lr": 1e-5
+        }
+    },
+
+    "model_params": {
+        "inter_channels": 192,
+        "hidden_channels": 192,
+        "filter_channels": 768,
+        "n_heads": 2,
+        "n_layers": 6,
+        "kernel_size": 3,
+        "p_dropout": 0.1,
+        "resblock_kernel_sizes": [3, 7, 11],
+        "resblock_dilation_sizes": [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+        "upsample_rates": [8, 8, 2, 2],
+        "upsample_initial_channel": 512,
+        "upsample_kernel_sizes": [16, 16, 4, 4],
+        "n_speakers": 0,
+        "speakers": [],
+        "use_spectral_norm": false,
+        "segment_size": 8192
+    },
+
+    "paths": {
+        "data_root": "data/raw/LJSpeech-1.1",
+        "output_dir": "data/generated/vits",
+        "log_dir": "logs/vits",
+        "checkpoint_dir": "logs/vits/checkpoints"
+    }
+}
