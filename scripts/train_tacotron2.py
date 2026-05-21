@@ -13,6 +13,8 @@ def main():
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--small", type=int, default=None,
                         help="Use only N samples for fast debug (e.g. 64)")
+    parser.add_argument("--continue_path", type=str, default=None,
+                        help="Path to previous run to resume training from")
     args = parser.parse_args()
 
     # Paths
@@ -70,7 +72,7 @@ def main():
         "test_eval_epochs": 10,
         "print_step": 25,
         "print_eval": True,
-        "save_step": max(1, args.epochs // 10),
+        "save_step": max(1, args.epochs // 20),
         "checkpoint": True,
 
         # ---- Early stopping ----
@@ -126,6 +128,10 @@ def main():
 
     if args.small:
         cmd.extend(["--small_run", str(args.small)])
+
+    if args.continue_path:
+        cmd.extend(["--continue_path", args.continue_path])
+        print(f"  Resuming from: {args.continue_path}")
 
     print(f"\n  Command: {' '.join(cmd)}\n")
     result = subprocess.run(cmd, cwd=PROJECT_ROOT)

@@ -1,431 +1,409 @@
 import os
 import sys
-import argparse
+import glob
 import json
+import argparse
 import numpy as np
-from collections import defaultdict
-
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, PROJECT_ROOT)
-
-from utils.audio_utils import load_audio, mel_spectrogram, compute_spectral_features
-
-
-def extract_features_from_directory(
-    audio_dir: str,
-    sr: int = 22050,
-    max_files: int = None,
-) -> dict:
-    """
-    Извлечь акустические признаки из всех wav файлов в директории.
-    Возвращает словарь с усреднёнными значениями по всем файлам.
-    """
-    import glob
-
-    wav_files = sorted(glob.glob(os.path.join(audio_dir, "*.wav")))
-    if not wav_files:
-        print(f"[WARN] Нет .wav файлов в {audio_dir}")
-        return {}
-
-    if max_files:
-        wav_files = wav_files[:max_files]
-
-    print(f"[INFO] Извлечение признаков из {len(wav_files)} файлов: {audio_dir}")
-
-    # Накопители
-    all_features = defaultdict(list)
-    mel_spectrograms = []
-
-    for i, wav_path in enumerate(wav_files):
-        print(f"  [{i + 1}/{len(wav_files)}] {os.path.basename(wav_path)}")
-
-        wav = load_audio(wav_path, sr=sr)
-        features = compute_spectral_features(wav, sr=sr)
-        mel = mel_spectrogram(wav, sr=sr)
-
-        # Накапливаем средние значения для каждого признака
-        for key, value in features.items():
-            if value is not None:
-                # Для 1D признаков берём среднее
-                if isinstance(value, np.ndarray) and value.ndim == 1:
-                    valid = value[~np.isnan(value)]
-                    if len(valid) > 0:
-                        all_features[key].append(np.mean(valid))
-                        all_features[f"{key}_std"].append(np.std(valid))
-                # Для 2D признаков (spectral_contrast) берём среднее по всему
-                elif isinstance(value, np.ndarray) and value.ndim == 2:
-                    valid = value[~np.isnan(value)]
-                    if len(valid) > 0:
-                        all_features[key].append(np.mean(valid))
-                        all_features[f"{key}_std"].append(np.std(valid))
-
-        mel_spectrograms.append(mel)
-
-    # Агрегируем: среднее и std по файлам
-    aggregated = {}
-    for key, values in all_features.items():
-        if len(values) > 0:
-            valid = [v for v in values if not np.isnan(v)]
-            if valid:
-                aggregated[key] = {
-                    "mean": float(np.mean(valid)),
-                    "std": float(np.std(valid)),
-                    "min": float(np.min(valid)),
-                    "max": float(np.max(valid)),
-                }
-
-    aggregated["num_files"] = len(wav_files)
-    aggregated["mel_spectrograms"] = mel_spectrograms
-
-    return aggregated
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import librosa
+import librosa.display
 
 
-def compute_statistics_comparison(features_dict: dict, name: str) -> dict:
-    """Форматировать признаки для сравнительной таблицы."""
-    stats = {"name": name}
-    keys_of_interest = [
-        "spectral_centroid", "spectral_bandwidth", "spectral_rolloff",
-        "spectral_flatness", "zero_crossing_rate", "rms",
-        "f0",
-    ]
-
-    for key in keys_of_interest:
-        if key in features_dict:
-            stats[key] = features_dict[key]
-        # MFCC
-        for i in range(1, 14):
-            mfcc_key = f"mfcc_{i}"
-            if mfcc_key in features_dict:
-                stats[mfcc_key] = features_dict[mfcc_key]
-
-    return stats
-
-
-def save_comparison_table(
-    features_list: list[dict],
-    output_path: str,
-):
-    """Сохранить сравнительную таблицу в JSON."""
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(features_list, f, indent=4, ensure_ascii=False)
-    print(f"\n[INFO] Сравнительная таблица сохранена: {output_path}")
-
-
-def plot_comparison(
-    features_list: list[tuple[str, dict]],
-    output_dir: str,
-):
-    """
-    Построить графики сравнения акустических признаков.
-    features_list: [(name, features_dict), ...]
-    """
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    # Настройка шрифтов для русского (если нужно)
+plt.rcParams["axes.unicode_minus"] = False
+try:
+    plt.style.use("seaborn-v0_8-whitegrid")
+except Exception:
     try:
-        import matplotlib.font_manager as fm
-        fm.fontManager.addfont("/usr/share/fonts/truetype/chinese/NotoSansSC[wght].ttf")
-        plt.rcParams["font.sans-serif"] = ["Noto Sans SC", "DejaVu Sans"]
+        plt.style.use("seaborn-whitegrid")
     except Exception:
         pass
 
-    os.makedirs(output_dir, exist_ok=True)
 
-    colors = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B2"]
+def load_audio(filepath, sr=22050):
+    return librosa.load(filepath, sr=sr)[0]
 
-    # === 1. Сравнение MFCC (bar chart) ===
-    fig, axes = plt.subplots(2, 1, figsize=(14, 10))
 
-    mfcc_means = {}
-    for name, feats in features_list:
-        means = [feats.get(f"mfcc_{i}", {}).get("mean", 0) for i in range(1, 14)]
-        mfcc_means[name] = means
+def extract_mfcc(wav, sr=22050, n_mfcc=13):
+    return librosa.feature.mfcc(y=wav, sr=sr, n_mfcc=n_mfcc)
 
-    x = np.arange(13)
-    width = 0.25
-    for idx, (name, means) in enumerate(mfcc_means.items()):
-        offset = (idx - len(mfcc_means) / 2 + 0.5) * width
-        axes[0].bar(x + offset, means, width, label=name, color=colors[idx % len(colors)], alpha=0.8)
-    axes[0].set_xlabel("MFCC Coefficient")
-    axes[0].set_ylabel("Mean Value")
-    axes[0].set_title("MFCC Mean Values Comparison")
-    axes[0].set_xticks(x)
-    axes[0].set_xticklabels([str(i) for i in range(1, 14)])
-    axes[0].legend(loc="best")
-    axes[0].grid(axis="y", alpha=0.3)
 
-    # MFCC Std
-    mfcc_stds = {}
-    for name, feats in features_list:
-        stds = [feats.get(f"mfcc_{i}", {}).get("std", 0) for i in range(1, 14)]
-        mfcc_stds[name] = stds
+def extract_f0(wav, sr=22050, fmin=80, fmax=400):
+    f0, voiced_flag, voiced_probs = librosa.pyin(
+        wav, fmin=fmin, fmax=fmax, sr=sr
+    )
+    return f0  # np.array with NaN for unvoiced
 
-    for idx, (name, stds) in enumerate(mfcc_stds.items()):
-        offset = (idx - len(mfcc_stds) / 2 + 0.5) * width
-        axes[1].bar(x + offset, stds, width, label=name, color=colors[idx % len(colors)], alpha=0.8)
-    axes[1].set_xlabel("MFCC Coefficient")
-    axes[1].set_ylabel("Std Value")
-    axes[1].set_title("MFCC Std Values Comparison")
-    axes[1].set_xticks(x)
-    axes[1].set_xticklabels([str(i) for i in range(1, 14)])
-    axes[1].legend(loc="best")
-    axes[1].grid(axis="y", alpha=0.3)
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "mfcc_comparison.png"), dpi=150)
-    plt.close()
-    print(f"[INFO] Сохранён: {output_dir}/mfcc_comparison.png")
+def extract_spectral_centroid(wav, sr=22050):
+    return librosa.feature.spectral_centroid(y=wav, sr=sr)[0]
 
-    # === 2. Спектральные признаки (grouped bar) ===
-    spectral_keys = [
-        ("spectral_centroid", "Spectral Centroid (Hz)"),
-        ("spectral_bandwidth", "Spectral Bandwidth (Hz)"),
-        ("spectral_rolloff", "Spectral Rolloff (Hz)"),
-        ("zero_crossing_rate", "Zero Crossing Rate"),
-        ("rms", "RMS Energy"),
-        ("spectral_flatness", "Spectral Flatness"),
-    ]
 
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    axes = axes.flatten()
+def extract_spectral_bandwidth(wav, sr=22050):
+    return librosa.feature.spectral_bandwidth(y=wav, sr=sr)[0]
 
-    for idx, (key, title) in enumerate(spectral_keys):
-        means = []
-        stds = []
-        names = []
-        for name, feats in features_list:
-            if key in feats:
-                means.append(feats[key]["mean"])
-                stds.append(feats[key]["std"])
-                names.append(name)
 
-        if means:
-            x_pos = np.arange(len(names))
-            bars = axes[idx].bar(x_pos, means, color=[colors[i % len(colors)] for i in range(len(names))], alpha=0.8, yerr=stds, capsize=3)
-            axes[idx].set_xticks(x_pos)
-            axes[idx].set_xticklabels(names, fontsize=9)
-        axes[idx].set_title(title, fontsize=11)
-        axes[idx].grid(axis="y", alpha=0.3)
+def extract_spectral_rolloff(wav, sr=22050):
+    return librosa.feature.spectral_rolloff(y=wav, sr=sr)[0]
 
-    plt.suptitle("Spectral Features Comparison", fontsize=14, y=1.02)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "spectral_comparison.png"), dpi=150)
-    plt.close()
-    print(f"[INFO] Сохранён: {output_dir}/spectral_comparison.png")
 
-    # === 3. F0 распределение ===
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+def extract_spectral_flatness(wav, sr=22050):
+    return librosa.feature.spectral_flatness(y=wav)[0]
 
-    # F0 mean
-    f0_names = []
-    f0_means = []
-    f0_stds = []
-    for name, feats in features_list:
-        if "f0" in feats:
-            f0_names.append(name)
-            f0_means.append(feats["f0"]["mean"])
-            f0_stds.append(feats["f0"]["std"])
 
-    if f0_means:
-        axes[0].bar(f0_names, f0_means, color=[colors[i % len(colors)] for i in range(len(f0_names))], alpha=0.8, yerr=f0_stds, capsize=3)
-    axes[0].set_title("F0 (Pitch) Mean Comparison")
-    axes[0].set_ylabel("Frequency (Hz)")
-    axes[0].grid(axis="y", alpha=0.3)
+def extract_zero_crossing_rate(wav):
+    return librosa.feature.zero_crossing_rate(wav)[0]
 
-    # F0 range
-    f0_ranges = []
-    for name, feats in features_list:
-        if "f0" in feats:
-            f0_ranges.append(feats["f0"]["max"] - feats["f0"]["min"])
 
-    if f0_ranges:
-        axes[1].bar(f0_names, f0_ranges, color=[colors[i % len(colors)] for i in range(len(f0_names))], alpha=0.8)
-    axes[1].set_title("F0 (Pitch) Range Comparison")
-    axes[1].set_ylabel("Range (Hz)")
-    axes[1].grid(axis="y", alpha=0.3)
+def find_pairs(eval_dir, ljspeech_dir=None):
+    """Find synth_*.wav and match with originals."""
+    synth_files = sorted(glob.glob(os.path.join(eval_dir, "synth_*.wav")))
+    pairs = []
+
+    for synth_path in synth_files:
+        basename = os.path.basename(synth_path)  # synth_LJ042-0149.wav
+        # Extract LJ id
+        lj_id = basename.replace("synth_", "").replace(".wav", "")  # LJ042-0149
+
+        if ljspeech_dir:
+            ref_path = os.path.join(ljspeech_dir, "wavs", lj_id + ".wav")
+        else:
+            # Try common locations
+            for d in ["data/raw/LJSpeech-1.1", "data/LJSpeech-1.1"]:
+                ref_path = os.path.join(d, "wavs", lj_id + ".wav")
+                if os.path.isfile(ref_path):
+                    break
+
+        if os.path.isfile(ref_path):
+            pairs.append({
+                "id": lj_id,
+                "ref": ref_path,
+                "synth": synth_path,
+            })
+        else:
+            print(f"  [WARN] Reference not found for {lj_id}")
+
+    return pairs
+
+
+def plot_mfcc_distribution(ref_mfccs, synth_mfccs, output_path):
+    """Plot MFCC coefficient distributions (mean across time for each file)."""
+    fig, axes = plt.subplots(3, 5, figsize=(20, 12))
+    fig.suptitle("MFCC Coefficient Distributions (Original vs Synthesized)",
+                 fontsize=16, fontweight="bold", y=1.02)
+
+    ref_means = np.array([mfcc.mean(axis=1) for mfcc in ref_mfccs])  # (n_files, 13)
+    synth_means = np.array([mfcc.mean(axis=1) for mfcc in synth_mfccs])
+
+    for i in range(min(13, ref_means.shape[1])):
+        ax = axes[i // 5, i % 5]
+        ax.hist(ref_means[:, i], bins=15, alpha=0.6, color="#3498db", label="Original", density=True)
+        ax.hist(synth_means[:, i], bins=15, alpha=0.6, color="#e74c3c", label="Synthesized", density=True)
+        ax.set_title(f"MFCC-{i}", fontsize=11)
+        ax.legend(fontsize=8)
+        if i == 0:
+            ax.set_ylabel("Density", fontsize=10)
+        if i >= 10:
+            ax.set_xlabel("Value", fontsize=10)
+
+    # Скрыть пустые подграфики (ячейки 13 и 14)
+    for i in range(13, 15):
+        axes[i // 5, i % 5].set_visible(False)
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "f0_comparison.png"), dpi=150)
-    plt.close()
-    print(f"[INFO] Сохранён: {output_dir}/f0_comparison.png")
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  {os.path.basename(output_path)}")
 
-    # === 4. Мел-спектрограммы (образцы) ===
-    fig, axes = plt.subplots(len(features_list), 1, figsize=(14, 4 * len(features_list)))
+def plot_mfcc_heatmaps(ref_mfccs, synth_mfccs, pair_ids, output_path):
+    """Plot MFCC heatmaps for first 3 pairs side by side."""
+    n_show = min(3, len(ref_mfccs))
+    fig, axes = plt.subplots(n_show, 2, figsize=(16, 4 * n_show))
+    if n_show == 1:
+        axes = axes.reshape(1, 2)
 
-    for idx, (name, feats) in enumerate(features_list):
-        mels = feats.get("mel_spectrograms", [])
-        if mels:
-            # Показываем первую мел-спектрограмму как образец
-            ax = axes[idx] if len(features_list) > 1 else axes
-            im = ax.imshow(mels[0], aspect="auto", origin="lower", cmap="viridis")
-            ax.set_title(f"Mel Spectrogram — {name}")
-            ax.set_xlabel("Time Frame")
-            ax.set_ylabel("Mel Bin")
-            plt.colorbar(im, ax=ax)
+    for i in range(n_show):
+        librosa.display.specshow(ref_mfccs[i], x_axis="time", ax=axes[i, 0], sr=22050)
+        axes[i, 0].set_title(f"Original — {pair_ids[i]}", fontsize=11)
+        axes[i, 0].set_ylabel("MFCC Coeff")
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "mel_spectrograms_comparison.png"), dpi=150)
-    plt.close()
-    print(f"[INFO] Сохранён: {output_dir}/mel_spectrograms_comparison.png")
-
-    # === 5. Radar chart (MFCC средние, первые 5 коэффициентов) ===
-    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
-
-    categories = [f"MFCC-{i}" for i in range(1, 6)]
-    N = len(categories)
-    angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
-    angles += angles[:1]
-
-    for idx, (name, feats) in enumerate(features_list):
-        values = [feats.get(f"mfcc_{i}", {}).get("mean", 0) for i in range(1, 6)]
-        values += values[:1]
-        ax.plot(angles, values, "o-", linewidth=2, label=name, color=colors[idx % len(colors)])
-        ax.fill(angles, values, alpha=0.15, color=colors[idx % len(colors)])
-
-    ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(categories)
-    ax.set_title("MFCC Radar (Coefficients 1-5)", y=1.08)
-    ax.legend(loc="best")
+        librosa.display.specshow(synth_mfccs[i], x_axis="time", ax=axes[i, 1], sr=22050)
+        axes[i, 1].set_title(f"Synthesized — {pair_ids[i]}", fontsize=11)
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "mfcc_radar.png"), dpi=150)
-    plt.close()
-    print(f"[INFO] Сохранён: {output_dir}/mfcc_radar.png")
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  {os.path.basename(output_path)}")
+
+
+def plot_f0_contours(ref_f0s, synth_f0s, pair_ids, output_path):
+    """Plot F0 contours for first 5 pairs."""
+    n_show = min(5, len(ref_f0s))
+    fig, axes = plt.subplots(n_show, 1, figsize=(16, 3 * n_show))
+    if n_show == 1:
+        axes = np.array([axes])
+
+    for i in range(n_show):
+        ref_f0 = ref_f0s[i]
+        synth_f0 = synth_f0s[i]
+
+        t_ref = np.arange(len(ref_f0)) / 22050
+        t_synth = np.arange(len(synth_f0)) / 22050
+
+        # Mask NaN for plotting
+        ref_masked = np.where(np.isnan(ref_f0), None, ref_f0)
+        synth_masked = np.where(np.isnan(synth_f0), None, synth_f0)
+
+        axes[i].plot(t_ref, ref_masked, color="#3498db", linewidth=1.5, alpha=0.8, label="Original")
+        axes[i].plot(t_synth, synth_masked, color="#e74c3c", linewidth=1.5, alpha=0.8, label="Synthesized")
+        axes[i].set_title(f"F0 Contour — {pair_ids[i]}", fontsize=11)
+        axes[i].set_ylabel("F0 (Hz)")
+        axes[i].legend(loc="best", fontsize=9)
+
+    axes[-1].set_xlabel("Time (s)")
+    plt.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  {os.path.basename(output_path)}")
+
+
+def plot_f0_distribution(ref_f0s, synth_f0s, output_path):
+    """Plot F0 distribution (voiced only)."""
+    all_ref = []
+    all_synth = []
+    for f0 in ref_f0s:
+        valid = f0[~np.isnan(f0)]
+        if len(valid) > 0:
+            all_ref.extend(valid.tolist())
+    for f0 in synth_f0s:
+        valid = f0[~np.isnan(f0)]
+        if len(valid) > 0:
+            all_synth.extend(valid.tolist())
+
+    if not all_ref or not all_synth:
+        print("  [WARN] No valid F0 values")
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.hist(all_ref, bins=40, alpha=0.6, color="#3498db", label="Original", density=True)
+    ax.hist(all_synth, bins=40, alpha=0.6, color="#e74c3c", label="Synthesized", density=True)
+    ax.set_title("F0 Distribution (Original vs Synthesized)", fontsize=16, fontweight="bold")
+    ax.set_xlabel("F0 (Hz)", fontsize=12)
+    ax.set_ylabel("Density", fontsize=12)
+    ax.legend(fontsize=11)
+
+    # Stats
+    ref_arr = np.array(all_ref)
+    synth_arr = np.array(all_synth)
+    stats_text = (
+        f"Original:    mean={ref_arr.mean():.1f} Hz, std={ref_arr.std():.1f} Hz, median={np.median(ref_arr):.1f} Hz\n"
+        f"Synthesized: mean={synth_arr.mean():.1f} Hz, std={synth_arr.std():.1f} Hz, median={np.median(synth_arr):.1f} Hz"
+    )
+    ax.text(0.02, 0.95, stats_text, transform=ax.transAxes, fontsize=10,
+            verticalalignment="top", bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
+
+    plt.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  {os.path.basename(output_path)}")
+
+
+def plot_spectral_features(ref_feats, synth_feats, pair_ids, output_path):
+    """Plot spectral centroid, bandwidth, rolloff, flatness, ZCR."""
+    feature_names = ["spectral_centroid", "spectral_bandwidth",
+                     "spectral_rolloff", "spectral_flatness", "zero_crossing_rate"]
+    titles = ["Spectral Centroid", "Spectral Bandwidth",
+              "Spectral Rolloff", "Spectral Flatness", "Zero Crossing Rate"]
+    ylabels = ["Hz", "Hz", "Hz", "", "Rate"]
+
+    fig, axes = plt.subplots(5, 2, figsize=(16, 20))
+    fig.suptitle("Spectral Features (Original vs Synthesized)",
+                 fontsize=16, fontweight="bold", y=1.01)
+
+    for fi, fname in enumerate(feature_names):
+        ref_vals = [ref_feats[j][fname] for j in range(len(ref_feats))]
+        synth_vals = [synth_feats[j][fname] for j in range(len(synth_feats))]
+
+        # Distribution
+        ref_flat = np.concatenate([v for v in ref_vals if len(v) > 0])
+        synth_flat = np.concatenate([v for v in synth_vals if len(v) > 0])
+
+        if len(ref_flat) > 0 and len(synth_flat) > 0:
+            axes[fi, 0].hist(ref_flat, bins=40, alpha=0.6, color="#3498db",
+                             label="Original", density=True)
+            axes[fi, 0].hist(synth_flat, bins=40, alpha=0.6, color="#e74c3c",
+                             label="Synthesized", density=True)
+            axes[fi, 0].set_title(f"{titles[fi]} Distribution", fontsize=11)
+            axes[fi, 0].legend(fontsize=8)
+
+            # Box plot per file
+            ref_per_file = [v.mean() for v in ref_vals if len(v) > 0]
+            synth_per_file = [v.mean() for v in synth_vals if len(v) > 0]
+            n = min(len(ref_per_file), len(synth_per_file))
+
+            bp = axes[fi, 1].boxplot(
+                [ref_per_file[:n], synth_per_file[:n]],
+                tick_labels=["Original", "Synthesized"],
+                patch_artist=True, showfliers=True
+            )
+            bp["boxes"][0].set_facecolor("#3498db")
+            bp["boxes"][0].set_alpha(0.7)
+            bp["boxes"][1].set_facecolor("#e74c3c")
+            bp["boxes"][1].set_alpha(0.7)
+            axes[fi, 1].set_title(f"{titles[fi]} Mean per File", fontsize=11)
+
+        axes[fi, 0].set_ylabel(ylabels[fi], fontsize=10)
+        axes[fi, 1].set_ylabel(ylabels[fi], fontsize=10)
+
+    plt.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  {os.path.basename(output_path)}")
+
+
+def generate_stats(ref_mfccs, synth_mfccs, ref_f0s, synth_f0s, ref_feats, synth_feats, output_path):
+    """Generate text summary of acoustic features."""
+    lines = ["=" * 60, "ACOUSTIC ANALYSIS SUMMARY", "=" * 60, ""]
+
+    # MFCC stats
+    lines += ["--- MFCC Coefficients ---"]
+    ref_all = np.concatenate([mfcc.mean(axis=1) for mfcc in ref_mfccs])
+    synth_all = np.concatenate([mfcc.mean(axis=1) for mfcc in synth_mfccs])
+    for i in range(min(13, ref_mfccs[0].shape[0])):
+        r_vals = [mfcc[i].mean() for mfcc in ref_mfccs]
+        s_vals = [mfcc[i].mean() for mfcc in synth_mfccs]
+        lines.append(f"  MFCC-{i:>2}:  Original mean={np.mean(r_vals):>8.4f}  "
+                     f"Synth mean={np.mean(s_vals):>8.4f}  "
+                     f"Diff={np.mean(s_vals) - np.mean(r_vals):>+8.4f}")
+
+    # F0 stats
+    lines += ["", "--- F0 (Pitch) ---"]
+    ref_f0_vals = []
+    synth_f0_vals = []
+    for f0 in ref_f0s:
+        valid = f0[~np.isnan(f0)]
+        if len(valid) > 0:
+            ref_f0_vals.extend(valid.tolist())
+    for f0 in synth_f0s:
+        valid = f0[~np.isnan(f0)]
+        if len(valid) > 0:
+            synth_f0_vals.extend(valid.tolist())
+
+    if ref_f0_vals and synth_f0_vals:
+        r = np.array(ref_f0_vals)
+        s = np.array(synth_f0_vals)
+        lines.append(f"  Original:    mean={r.mean():.1f} Hz, std={r.std():.1f}, "
+                     f"min={r.min():.1f}, max={r.max():.1f}")
+        lines.append(f"  Synthesized: mean={s.mean():.1f} Hz, std={s.std():.1f}, "
+                     f"min={s.min():.1f}, max={s.max():.1f}")
+        lines.append(f"  F0 difference: {abs(s.mean() - r.mean()):.1f} Hz")
+
+    # Spectral features
+    lines += ["", "--- Spectral Features (mean per file) ---"]
+    feature_names = ["spectral_centroid", "spectral_bandwidth",
+                     "spectral_rolloff", "spectral_flatness", "zero_crossing_rate"]
+    for fname in feature_names:
+        r_means = [ref_feats[j][fname].mean() for j in range(len(ref_feats))]
+        s_means = [synth_feats[j][fname].mean() for j in range(len(synth_feats))]
+        lines.append(f"  {fname:<25}:  Orig={np.mean(r_means):>8.2f}  "
+                     f"Synth={np.mean(s_means):>8.2f}  "
+                     f"Diff={np.mean(s_means) - np.mean(r_means):>+8.2f}")
+
+    lines += ["", "=" * 60]
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    print(f"  {os.path.basename(output_path)}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Сравнительный анализ акустических признаков")
-
-    parser.add_argument("--ref", type=str, default=None, help="Директория с референсными аудио (LJSpeech)")
-    parser.add_argument("--gen", type=str, default=None, help="Директория с сгенерированными аудио (одна модель)")
-    parser.add_argument("--gen_t2", type=str, default=None, help="Директория с аудио Tacotron 2")
-    parser.add_argument("--gen_vits", type=str, default=None, help="Директория с аудио VITS")
-    parser.add_argument("--output_dir", type=str, default=os.path.join(PROJECT_ROOT, "data", "generated", "analysis"),
-                        help="Директория для графиков")
-    parser.add_argument("--output_json", type=str, default=None, help="Путь к JSON с результатами")
-    parser.add_argument("--max_files", type=int, default=None, help="Макс. файлов для анализа (для ускорения)")
-    parser.add_argument("--sr", type=int, default=22050, help="Sample rate (default: 22050)")
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--eval_dir", default="output/eval_pairs",
+                        help="Directory with synth_*.wav files from evaluate_with_reference.py")
+    parser.add_argument("--ljspeech_dir", default=None,
+                        help="Path to LJSpeech-1.1 (if not auto-detected)")
+    parser.add_argument("--output_dir", default="graphs/acoustic",
+                        help="Output directory for graphs")
     args = parser.parse_args()
 
-    print("=" * 60)
-    print("Сравнительный анализ акустических признаков")
-    print("=" * 60)
+    os.makedirs(args.output_dir, exist_ok=True)
 
-    features_list = []
+    # Auto-detect LJSpeech
+    if not args.ljspeech_dir:
+        for d in ["data/raw/LJSpeech-1.1", "data/LJSpeech-1.1"]:
+            if os.path.isdir(d):
+                args.ljspeech_dir = d
+                break
 
-    # 1. Референс
-    if args.ref:
-        ref_feats = extract_features_from_directory(args.ref, sr=args.sr, max_files=args.max_files)
-        if ref_feats:
-            stats = compute_statistics_comparison(ref_feats, "Reference (LJSpeech)")
-            features_list.append(("Reference (LJSpeech)", stats))
+    if not args.ljspeech_dir:
+        print("[ERROR] LJSpeech directory not found. Use --ljspeech_dir")
+        sys.exit(1)
 
-    # 2. Одна модель
-    if args.gen:
-        gen_feats = extract_features_from_directory(args.gen, sr=args.sr, max_files=args.max_files)
-        if gen_feats:
-            name = os.path.basename(args.gen)
-            stats = compute_statistics_comparison(gen_feats, name)
-            features_list.append((name, stats))
+    print("=" * 50)
+    print("ACOUSTIC ANALYSIS")
+    print("=" * 50)
+    print(f"Eval dir:    {args.eval_dir}")
+    print(f"LJSpeech:    {args.ljspeech_dir}")
+    print(f"Output:      {args.output_dir}\n")
 
-    # 3. Две модели
-    if args.gen_t2:
-        t2_feats = extract_features_from_directory(args.gen_t2, sr=args.sr, max_files=args.max_files)
-        if t2_feats:
-            stats = compute_statistics_comparison(t2_feats, "Tacotron 2")
-            features_list.append(("Tacotron 2", stats))
+    # Find pairs
+    pairs = find_pairs(args.eval_dir, args.ljspeech_dir)
+    if not pairs:
+        print("[ERROR] No pairs found. Run evaluate_with_reference.py first.")
+        sys.exit(1)
+    print(f"Found {len(pairs)} pairs\n")
 
-    if args.gen_vits:
-        vits_feats = extract_features_from_directory(args.gen_vits, sr=args.sr, max_files=args.max_files)
-        if vits_feats:
-            stats = compute_statistics_comparison(vits_feats, "VITS")
-            features_list.append(("VITS", stats))
+    # Extract features
+    ref_mfccs, synth_mfccs = [], []
+    ref_f0s, synth_f0s = [], []
+    ref_feats, synth_feats = [], []
+    pair_ids = []
 
-    if not features_list:
-        print("[ERROR] Не указаны директории с аудио!")
-        print("  Пример: --ref data/raw/LJSpeech-1.1/wavs --gen data/generated/tacotron2")
-        return
+    for i, pair in enumerate(pairs):
+        pair_ids.append(pair["id"])
+        print(f"  [{i+1}/{len(pairs)}] {pair['id']}")
 
-    # 4. Вывод сравнительной таблицы
-    print(f"\n{'=' * 80}")
-    print("СРАВНИТЕЛЬНАЯ ТАБЛИЦА АКУСТИЧЕСКИХ ПРИЗНАКОВ")
-    print(f"{'=' * 80}")
+        ref_wav = load_audio(pair["ref"])
+        synth_wav = load_audio(pair["synth"])
 
-    feature_keys = [
-        "spectral_centroid", "spectral_bandwidth", "spectral_rolloff",
-        "spectral_flatness", "zero_crossing_rate", "rms", "f0",
-    ]
+        ref_mfccs.append(extract_mfcc(ref_wav))
+        synth_mfccs.append(extract_mfcc(synth_wav))
 
-    # Заголовок
-    header = f"{'Признак':<25}"
-    for name, _ in features_list:
-        header += f" | {name:>20}"
-    print(header)
-    print("-" * (25 + 25 * len(features_list)))
+        ref_f0s.append(extract_f0(ref_wav))
+        synth_f0s.append(extract_f0(synth_wav))
 
-    for key in feature_keys:
-        row = f"{key:<25}"
-        for _, feats in features_list:
-            if key in feats:
-                mean = feats[key]["mean"]
-                std = feats[key]["std"]
-                row += f" | {mean:>10.2f} ± {std:<8.2f}"
-            else:
-                row += f" | {'N/A':>20}"
-        print(row)
+        ref_feats.append({
+            "spectral_centroid": extract_spectral_centroid(ref_wav),
+            "spectral_bandwidth": extract_spectral_bandwidth(ref_wav),
+            "spectral_rolloff": extract_spectral_rolloff(ref_wav),
+            "spectral_flatness": extract_spectral_flatness(ref_wav),
+            "zero_crossing_rate": extract_zero_crossing_rate(ref_wav),
+        })
+        synth_feats.append({
+            "spectral_centroid": extract_spectral_centroid(synth_wav),
+            "spectral_bandwidth": extract_spectral_bandwidth(synth_wav),
+            "spectral_rolloff": extract_spectral_rolloff(synth_wav),
+            "spectral_flatness": extract_spectral_flatness(synth_wav),
+            "zero_crossing_rate": extract_zero_crossing_rate(synth_wav),
+        })
 
-    # MFCC
-    print(f"\n{'MFCC':<25}")
-    for i in range(1, 14):
-        mfcc_key = f"mfcc_{i}"
-        row = f"  MFCC-{i:<21}"
-        for _, feats in features_list:
-            if mfcc_key in feats:
-                mean = feats[mfcc_key]["mean"]
-                std = feats[mfcc_key]["std"]
-                row += f" | {mean:>10.4f} ± {std:<8.4f}"
-            else:
-                row += f" | {'N/A':>20}"
-        print(row)
+    print(f"\nGenerating plots...")
 
-    print(f"{'=' * 80}\n")
+    # Generate all plots
+    plot_mfcc_distribution(ref_mfccs, synth_mfccs,
+                           os.path.join(args.output_dir, "01_mfcc_distribution.png"))
+    plot_mfcc_heatmaps(ref_mfccs, synth_mfccs, pair_ids,
+                       os.path.join(args.output_dir, "02_mfcc_heatmaps.png"))
+    plot_f0_contours(ref_f0s, synth_f0s, pair_ids,
+                     os.path.join(args.output_dir, "03_f0_contours.png"))
+    plot_f0_distribution(ref_f0s, synth_f0s,
+                         os.path.join(args.output_dir, "04_f0_distribution.png"))
+    plot_spectral_features(ref_feats, synth_feats, pair_ids,
+                           os.path.join(args.output_dir, "05_spectral_features.png"))
+    generate_stats(ref_mfccs, synth_mfccs, ref_f0s, synth_f0s, ref_feats, synth_feats,
+                   os.path.join(args.output_dir, "acoustic_summary.txt"))
 
-    # 5. Сохранить JSON
-    json_output = args.output_json or os.path.join(args.output_dir, "acoustic_features.json")
-    save_json = [(name, feats) for name, feats in features_list]
-    save_comparison_table(
-        [{"name": n, "features": f} for n, f in save_json],
-        json_output,
-    )
-
-    # 6. Построить графики
-    # Для графиков нужны полные features (с мел-спектрограммами)
-    plot_data = []
-    if args.ref:
-        ref_feats = extract_features_from_directory(args.ref, sr=args.sr, max_files=3)
-        if ref_feats:
-            plot_data.append(("Reference", compute_statistics_comparison(ref_feats, "Reference")))
-    if args.gen_t2:
-        t2_feats = extract_features_from_directory(args.gen_t2, sr=args.sr, max_files=3)
-        if t2_feats:
-            plot_data.append(("Tacotron 2", compute_statistics_comparison(t2_feats, "Tacotron 2")))
-    if args.gen_vits:
-        vits_feats = extract_features_from_directory(args.gen_vits, sr=args.sr, max_files=3)
-        if vits_feats:
-            plot_data.append(("VITS", compute_statistics_comparison(vits_feats, "VITS")))
-    if args.gen and not args.gen_t2 and not args.gen_vits:
-        gen_feats = extract_features_from_directory(args.gen, sr=args.sr, max_files=3)
-        if gen_feats:
-            plot_data.append((os.path.basename(args.gen), compute_statistics_comparison(gen_feats, os.path.basename(args.gen))))
-
-    if plot_data:
-        plot_comparison(plot_data, args.output_dir)
-
-    print("[INFO] Анализ завершён!")
+    print("\nDone!")
 
 
 if __name__ == "__main__":
