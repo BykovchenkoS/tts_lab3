@@ -1,0 +1,32 @@
+============================================================
+ACOUSTIC ANALYSIS SUMMARY
+============================================================
+
+--- MFCC Coefficients ---
+  MFCC- 0:  Original mean=-308.4060  Synth mean=-379.2087  Diff=-70.8026
+  MFCC- 1:  Original mean= 90.1121  Synth mean= 78.9568  Diff=-11.1553
+  MFCC- 2:  Original mean= -1.6915  Synth mean= 18.6177  Diff=+20.3093
+  MFCC- 3:  Original mean= 17.1723  Synth mean= 27.9583  Diff=+10.7859
+  MFCC- 4:  Original mean=-15.5127  Synth mean=-11.3614  Diff= +4.1512
+  MFCC- 5:  Original mean=-25.7235  Synth mean=-16.0421  Diff= +9.6814
+  MFCC- 6:  Original mean=-16.4079  Synth mean=-29.1078  Diff=-12.7000
+  MFCC- 7:  Original mean=-17.8493  Synth mean=-24.7362  Diff= -6.8868
+  MFCC- 8:  Original mean=-17.1568  Synth mean=-19.9052  Diff= -2.7484
+  MFCC- 9:  Original mean= -4.1674  Synth mean= -4.8026  Diff= -0.6353
+  MFCC-10:  Original mean=-19.1736  Synth mean=-18.0651  Diff= +1.1085
+  MFCC-11:  Original mean= -4.8112  Synth mean=-15.7891  Diff=-10.9780
+  MFCC-12:  Original mean=-16.5107  Synth mean= -7.2073  Diff= +9.3034
+
+--- F0 (Pitch) ---
+  Original:    mean=208.0 Hz, std=47.8, min=127.0, max=389.4
+  Synthesized: mean=198.6 Hz, std=36.1, min=124.1, max=389.4
+  F0 difference: 9.4 Hz
+
+--- Spectral Features (mean per file) ---
+  spectral_centroid        :  Orig= 2400.05  Synth= 1482.52  Diff= -917.53
+  spectral_bandwidth       :  Orig= 2003.01  Synth= 1135.23  Diff= -867.78
+  spectral_rolloff         :  Orig= 4227.26  Synth= 2420.66  Diff=-1806.60
+  spectral_flatness        :  Orig=    0.02  Synth=    0.11  Diff=   +0.09
+  zero_crossing_rate       :  Orig=    0.14  Synth=    0.10  Diff=   -0.04
+
+============================================================
