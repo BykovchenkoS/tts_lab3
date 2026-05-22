@@ -1,10 +1,3 @@
-"""
-plot_training_logs.py — Build training graphs from Coqui TTS trainer_0_log.txt
-
-Usage:
-    python plot_training_logs.py <trainer_0_log.txt> [--output_dir <dir>]
-"""
-
 import re
 import os
 import sys
@@ -131,7 +124,6 @@ def smooth(y, window=20):
 
 
 def fix_origin_zero(ax):
-    """Remove duplicate '0' at origin — keep only on Y axis."""
     xticks = ax.get_xticks()
     if len(xticks) > 0 and xticks[0] == 0:
         xticklabels = [t.get_text() for t in ax.get_xticklabels()]
@@ -169,8 +161,6 @@ def plot_metric(data, keys, filename, title, ylabel, colors=None):
 
 
 def make_boxplot(epoch_dict, all_epochs, output_dir):
-    """Generate boxplot: full + two detail halves."""
-    # --- FULL ---
     fig, ax = plt.subplots(figsize=(max(20, len(all_epochs) * 0.18), 7))
     box_data = [epoch_dict[ep] for ep in all_epochs]
     labels = [str(ep) for ep in all_epochs]
@@ -212,7 +202,6 @@ def make_boxplot(epoch_dict, all_epochs, output_dir):
     plt.close(fig)
     print(f"  09_loss_boxplot_FULL.png ({len(all_epochs)} epochs)")
 
-    # --- DETAIL HALVES ---
     mid = (len(all_epochs) + 1) // 2
     halves = [
         (all_epochs[:mid],
@@ -279,10 +268,8 @@ def make_boxplot(epoch_dict, all_epochs, output_dir):
 
 
 def make_avg_loss_line(epoch_dict, all_epochs, output_dir):
-    """Generate avg loss per epoch: full + two detail halves."""
     avg_loss_all = [sum(epoch_dict[ep]) / len(epoch_dict[ep]) for ep in all_epochs]
 
-    # --- FULL ---
     fig, ax = plt.subplots(figsize=(max(16, len(all_epochs) * 0.12), 6))
     ax.plot(all_epochs, avg_loss_all, color="#e74c3c", linewidth=2.5,
             marker="o", markersize=2)
@@ -307,7 +294,6 @@ def make_avg_loss_line(epoch_dict, all_epochs, output_dir):
     plt.close(fig)
     print(f"  10_avg_loss_per_epoch_FULL.png ({len(all_epochs)} epochs)")
 
-    # --- DETAIL HALVES ---
     mid = (len(all_epochs) + 1) // 2
     halves = [
         (all_epochs[:mid],
@@ -468,23 +454,33 @@ def generate_summary(data, output_dir):
     if lv:
         n20 = max(1, len(lv) // 20)
         s, e = sum(lv[:n20]) / n20, sum(lv[-n20:]) / n20
-        if e < s * 0.5:    lines.append("  [GOOD] Loss decreased by >50%")
-        elif e < s * 0.75:  lines.append("  [OK] Loss decreased by 25-50%")
-        elif e < s:         lines.append("  [WEAK] Loss decreased but <25%")
-        else:               lines.append("  [BAD] Loss NOT decreasing!")
+        if e < s * 0.5:
+            lines.append("  [GOOD] Loss decreased by >50%")
+        elif e < s * 0.75:
+            lines.append("  [OK] Loss decreased by 25-50%")
+        elif e < s:
+            lines.append("  [WEAK] Loss decreased but <25%")
+        else:
+            lines.append("  [BAD] Loss NOT decreasing!")
     sn = data.get("stopnet_loss", [])
     if sn:
         a = sum(sn[-10:]) / min(10, len(sn))
-        if a < 0.01:   lines.append(f"  [GOOD] Stopnet loss very low: {a:.4f}")
-        elif a < 0.05:  lines.append(f"  [OK] Stopnet loss moderate: {a:.4f}")
-        else:           lines.append(f"  [BAD] Stopnet loss too high: {a:.4f}")
+        if a < 0.01:
+            lines.append(f"  [GOOD] Stopnet loss very low: {a:.4f}")
+        elif a < 0.05:
+            lines.append(f"  [OK] Stopnet loss moderate: {a:.4f}")
+        else:
+            lines.append(f"  [BAD] Stopnet loss too high: {a:.4f}")
     ae = data.get("align_error", [])
     if ae:
         n20 = max(1, len(ae) // 20)
         s, e = sum(ae[:n20]) / n20, sum(ae[-n20:]) / n20
-        if e < s * 0.7:   lines.append("  [GOOD] Alignment error decreasing")
-        elif e < s:        lines.append("  [OK] Alignment error slowly decreasing")
-        else:              lines.append("  [BAD] Alignment error NOT decreasing!")
+        if e < s * 0.7:
+            lines.append("  [GOOD] Alignment error decreasing")
+        elif e < s:
+            lines.append("  [OK] Alignment error slowly decreasing")
+        else:
+            lines.append("  [BAD] Alignment error NOT decreasing!")
 
     lines += ["", "=" * 60]
     with open(path, "w", encoding="utf-8") as f:

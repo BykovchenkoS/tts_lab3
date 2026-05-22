@@ -33,7 +33,7 @@ def extract_f0(wav, sr=22050, fmin=80, fmax=400):
     f0, voiced_flag, voiced_probs = librosa.pyin(
         wav, fmin=fmin, fmax=fmax, sr=sr
     )
-    return f0  # np.array with NaN for unvoiced
+    return f0
 
 
 def extract_spectral_centroid(wav, sr=22050):
@@ -57,19 +57,16 @@ def extract_zero_crossing_rate(wav):
 
 
 def find_pairs(eval_dir, ljspeech_dir=None):
-    """Find synth_*.wav and match with originals."""
     synth_files = sorted(glob.glob(os.path.join(eval_dir, "synth_*.wav")))
     pairs = []
 
     for synth_path in synth_files:
-        basename = os.path.basename(synth_path)  # synth_LJ042-0149.wav
-        # Extract LJ id
+        basename = os.path.basename(synth_path)
         lj_id = basename.replace("synth_", "").replace(".wav", "")  # LJ042-0149
 
         if ljspeech_dir:
             ref_path = os.path.join(ljspeech_dir, "wavs", lj_id + ".wav")
         else:
-            # Try common locations
             for d in ["data/raw/LJSpeech-1.1", "data/LJSpeech-1.1"]:
                 ref_path = os.path.join(d, "wavs", lj_id + ".wav")
                 if os.path.isfile(ref_path):
@@ -88,7 +85,6 @@ def find_pairs(eval_dir, ljspeech_dir=None):
 
 
 def plot_mfcc_distribution(ref_mfccs, synth_mfccs, output_path):
-    """Plot MFCC coefficient distributions (mean across time for each file)."""
     fig, axes = plt.subplots(3, 5, figsize=(20, 12))
     fig.suptitle("MFCC Coefficient Distributions (Original vs Synthesized)",
                  fontsize=16, fontweight="bold", y=1.02)
@@ -107,7 +103,6 @@ def plot_mfcc_distribution(ref_mfccs, synth_mfccs, output_path):
         if i >= 10:
             ax.set_xlabel("Value", fontsize=10)
 
-    # Скрыть пустые подграфики (ячейки 13 и 14)
     for i in range(13, 15):
         axes[i // 5, i % 5].set_visible(False)
 
@@ -116,8 +111,8 @@ def plot_mfcc_distribution(ref_mfccs, synth_mfccs, output_path):
     plt.close(fig)
     print(f"  {os.path.basename(output_path)}")
 
+
 def plot_mfcc_heatmaps(ref_mfccs, synth_mfccs, pair_ids, output_path):
-    """Plot MFCC heatmaps for first 3 pairs side by side."""
     n_show = min(3, len(ref_mfccs))
     fig, axes = plt.subplots(n_show, 2, figsize=(16, 4 * n_show))
     if n_show == 1:
@@ -138,7 +133,6 @@ def plot_mfcc_heatmaps(ref_mfccs, synth_mfccs, pair_ids, output_path):
 
 
 def plot_f0_contours(ref_f0s, synth_f0s, pair_ids, output_path):
-    """Plot F0 contours for first 5 pairs."""
     n_show = min(5, len(ref_f0s))
     fig, axes = plt.subplots(n_show, 1, figsize=(16, 3 * n_show))
     if n_show == 1:
@@ -151,7 +145,6 @@ def plot_f0_contours(ref_f0s, synth_f0s, pair_ids, output_path):
         t_ref = np.arange(len(ref_f0)) / 22050
         t_synth = np.arange(len(synth_f0)) / 22050
 
-        # Mask NaN for plotting
         ref_masked = np.where(np.isnan(ref_f0), None, ref_f0)
         synth_masked = np.where(np.isnan(synth_f0), None, synth_f0)
 
@@ -169,7 +162,6 @@ def plot_f0_contours(ref_f0s, synth_f0s, pair_ids, output_path):
 
 
 def plot_f0_distribution(ref_f0s, synth_f0s, output_path):
-    """Plot F0 distribution (voiced only)."""
     all_ref = []
     all_synth = []
     for f0 in ref_f0s:
@@ -193,7 +185,6 @@ def plot_f0_distribution(ref_f0s, synth_f0s, output_path):
     ax.set_ylabel("Density", fontsize=12)
     ax.legend(fontsize=11)
 
-    # Stats
     ref_arr = np.array(all_ref)
     synth_arr = np.array(all_synth)
     stats_text = (
@@ -210,7 +201,6 @@ def plot_f0_distribution(ref_f0s, synth_f0s, output_path):
 
 
 def plot_spectral_features(ref_feats, synth_feats, pair_ids, output_path):
-    """Plot spectral centroid, bandwidth, rolloff, flatness, ZCR."""
     feature_names = ["spectral_centroid", "spectral_bandwidth",
                      "spectral_rolloff", "spectral_flatness", "zero_crossing_rate"]
     titles = ["Spectral Centroid", "Spectral Bandwidth",
@@ -225,7 +215,6 @@ def plot_spectral_features(ref_feats, synth_feats, pair_ids, output_path):
         ref_vals = [ref_feats[j][fname] for j in range(len(ref_feats))]
         synth_vals = [synth_feats[j][fname] for j in range(len(synth_feats))]
 
-        # Distribution
         ref_flat = np.concatenate([v for v in ref_vals if len(v) > 0])
         synth_flat = np.concatenate([v for v in synth_vals if len(v) > 0])
 
@@ -237,7 +226,6 @@ def plot_spectral_features(ref_feats, synth_feats, pair_ids, output_path):
             axes[fi, 0].set_title(f"{titles[fi]} Distribution", fontsize=11)
             axes[fi, 0].legend(fontsize=8)
 
-            # Box plot per file
             ref_per_file = [v.mean() for v in ref_vals if len(v) > 0]
             synth_per_file = [v.mean() for v in synth_vals if len(v) > 0]
             n = min(len(ref_per_file), len(synth_per_file))
@@ -263,10 +251,8 @@ def plot_spectral_features(ref_feats, synth_feats, pair_ids, output_path):
 
 
 def generate_stats(ref_mfccs, synth_mfccs, ref_f0s, synth_f0s, ref_feats, synth_feats, output_path):
-    """Generate text summary of acoustic features."""
     lines = ["=" * 60, "ACOUSTIC ANALYSIS SUMMARY", "=" * 60, ""]
 
-    # MFCC stats
     lines += ["--- MFCC Coefficients ---"]
     ref_all = np.concatenate([mfcc.mean(axis=1) for mfcc in ref_mfccs])
     synth_all = np.concatenate([mfcc.mean(axis=1) for mfcc in synth_mfccs])
@@ -277,7 +263,6 @@ def generate_stats(ref_mfccs, synth_mfccs, ref_f0s, synth_f0s, ref_feats, synth_
                      f"Synth mean={np.mean(s_vals):>8.4f}  "
                      f"Diff={np.mean(s_vals) - np.mean(r_vals):>+8.4f}")
 
-    # F0 stats
     lines += ["", "--- F0 (Pitch) ---"]
     ref_f0_vals = []
     synth_f0_vals = []
@@ -299,7 +284,6 @@ def generate_stats(ref_mfccs, synth_mfccs, ref_f0s, synth_f0s, ref_feats, synth_
                      f"min={s.min():.1f}, max={s.max():.1f}")
         lines.append(f"  F0 difference: {abs(s.mean() - r.mean()):.1f} Hz")
 
-    # Spectral features
     lines += ["", "--- Spectral Features (mean per file) ---"]
     feature_names = ["spectral_centroid", "spectral_bandwidth",
                      "spectral_rolloff", "spectral_flatness", "zero_crossing_rate"]
@@ -328,7 +312,6 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Auto-detect LJSpeech
     if not args.ljspeech_dir:
         for d in ["data/raw/LJSpeech-1.1", "data/LJSpeech-1.1"]:
             if os.path.isdir(d):
@@ -346,14 +329,12 @@ def main():
     print(f"LJSpeech:    {args.ljspeech_dir}")
     print(f"Output:      {args.output_dir}\n")
 
-    # Find pairs
     pairs = find_pairs(args.eval_dir, args.ljspeech_dir)
     if not pairs:
         print("[ERROR] No pairs found. Run evaluate_with_reference.py first.")
         sys.exit(1)
     print(f"Found {len(pairs)} pairs\n")
 
-    # Extract features
     ref_mfccs, synth_mfccs = [], []
     ref_f0s, synth_f0s = [], []
     ref_feats, synth_feats = [], []
@@ -389,7 +370,6 @@ def main():
 
     print(f"\nGenerating plots...")
 
-    # Generate all plots
     plot_mfcc_distribution(ref_mfccs, synth_mfccs,
                            os.path.join(args.output_dir, "01_mfcc_distribution.png"))
     plot_mfcc_heatmaps(ref_mfccs, synth_mfccs, pair_ids,

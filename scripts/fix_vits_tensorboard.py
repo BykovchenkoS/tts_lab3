@@ -70,7 +70,6 @@ def main():
                         help="Steps per epoch")
     args = parser.parse_args()
 
-    # Find log file
     log_files = glob.glob(os.path.join(args.log_dir, "*", "trainer_0_log.txt"))
     if not log_files:
         print(f"[ERROR] No trainer_0_log.txt found in {args.log_dir}")
@@ -79,7 +78,6 @@ def main():
     log_file = log_files[0]
     print(f"Log file: {log_file}")
 
-    # Parse
     print("Parsing log...")
     data = parse_log(log_file)
     print(f"Found {len(data)} logged steps")
@@ -88,11 +86,9 @@ def main():
         print("[ERROR] No data parsed from log")
         sys.exit(1)
 
-    # Create TB events in a subdirectory
     tb_dir = os.path.join(args.log_dir, "tb_fixed")
     writer = SummaryWriter(log_dir=tb_dir)
 
-    # Metrics to log (skip disc_real sub-losses and timing to keep it clean)
     key_metrics = {
         "loss_1": "Loss/Generator Total",
         "loss_disc": "Loss/Discriminator",
@@ -107,7 +103,6 @@ def main():
         "current_lr_1": "LR/Generator",
     }
 
-    # All metrics (even sub-losses)
     all_metrics = set()
     for entry in data:
         for k in entry:

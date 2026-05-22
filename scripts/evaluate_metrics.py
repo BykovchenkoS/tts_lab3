@@ -10,35 +10,29 @@ import soundfile as sf
 
 
 def load_audio(filepath, sr=22050):
-    """Load and normalize audio."""
     y, orig_sr = librosa.load(filepath, sr=sr)
     return y
 
 
 def resample_wav(wav, orig_sr, target_sr):
-    """Resample wav to target_sr."""
     return librosa.resample(wav, orig_sr=orig_sr, target_rate=target_sr)
 
 
 def mel_spectrogram(wav, sr=22050, n_mels=80, n_fft=1024, hop_length=256):
-    """Compute mel spectrogram."""
     S = librosa.feature.melspectrogram(y=wav, sr=sr, n_mels=n_mels,
                                         n_fft=n_fft, hop_length=hop_length)
     return S
 
 
 def align_length(ref, deg):
-    """Trim to same length."""
     min_len = min(len(ref), len(deg))
     return ref[:min_len], deg[:min_len]
 
 
 def compute_pesq(ref, deg, sr=22050):
-    """PESQ: -0.5 to 4.5, higher is better."""
     try:
         from pesq import pesq as pesq_fn
 
-        # PESQ requires 16000 Hz
         if sr != 16000:
             ref_16k = resample_wav(ref, sr, 16000)
             deg_16k = resample_wav(deg, sr, 16000)
@@ -55,7 +49,6 @@ def compute_pesq(ref, deg, sr=22050):
 
 
 def compute_stoi(ref, deg, sr=22050):
-    """STOI: 0.0 to 1.0, higher is better."""
     try:
         from pystoi.stoi import stoi as stoi_fn
 
@@ -75,7 +68,6 @@ def compute_stoi(ref, deg, sr=22050):
 
 
 def compute_ssim_mel(ref, deg, sr=22050):
-    """Spectral SSIM between mel spectrograms."""
     try:
         from skimage.metrics import structural_similarity as ssim
 
@@ -98,7 +90,6 @@ def compute_ssim_mel(ref, deg, sr=22050):
 
 
 def evaluate_single(ref_path, gen_path, sr=22050):
-    """Evaluate all metrics for one file pair."""
     ref_wav = load_audio(ref_path, sr=sr)
     gen_wav = load_audio(gen_path, sr=sr)
 
@@ -112,7 +103,6 @@ def evaluate_single(ref_path, gen_path, sr=22050):
 
 
 def evaluate_directory(gen_dir, ref_dir=None, results_file=None):
-    """Evaluate all wav files in directory."""
     gen_files = sorted(glob.glob(os.path.join(gen_dir, "*.wav")))
     if not gen_files:
         print(f"[ERROR] No .wav files in {gen_dir}")
@@ -150,10 +140,8 @@ def evaluate_directory(gen_dir, ref_dir=None, results_file=None):
         if parts:
             print(f"    {' | '.join(parts)}")
 
-    # Summary
     print_summary(all_metrics, os.path.basename(gen_dir))
 
-    # Save
     if results_file:
         os.makedirs(os.path.dirname(results_file), exist_ok=True)
         report = {
@@ -170,7 +158,6 @@ def evaluate_directory(gen_dir, ref_dir=None, results_file=None):
 
 
 def get_summary(metrics_list):
-    """Compute average metrics."""
     summary = {}
     for key in ["pesq", "stoi", "ssim_mel"]:
         vals = [m[key] for m in metrics_list if m.get(key) is not None]
@@ -185,7 +172,6 @@ def get_summary(metrics_list):
 
 
 def print_summary(metrics_list, model_name=""):
-    """Print summary table."""
     summary = get_summary(metrics_list)
 
     print(f"\n{'=' * 55}")

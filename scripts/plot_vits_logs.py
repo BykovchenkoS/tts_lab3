@@ -1,8 +1,4 @@
-﻿"""
-Plot VITS training logs (from trainer_0_log.txt).
-Based on plot_training_logs.py, adapted for VITS-specific metrics.
-"""
-import os
+﻿import os
 import sys
 import re
 import argparse
@@ -10,6 +6,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
 
 try:
     plt.style.use("seaborn-v0_8-whitegrid")
@@ -21,8 +18,6 @@ except Exception:
 
 plt.rcParams["axes.unicode_minus"] = False
 
-
-# в”Ђв”Ђв”Ђ Fonts в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 try:
     import matplotlib.font_manager as fm
     fm.fontManager.addfont("/usr/share/fonts/truetype/chinese/NotoSansSC[wght].ttf")
@@ -32,9 +27,7 @@ except Exception:
     pass
 
 
-# в”Ђв”Ђв”Ђ Tensor value parser в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def parse_tensor_value(text):
-    """Extract float from 'tensor(X, device='cuda:0')' or plain float."""
     text = text.strip()
     m = re.match(r"tensor\(\s*([+-]?\d+\.?\d*(?:[eE][+-]?\d+)?)", text)
     if m:
@@ -45,22 +38,15 @@ def parse_tensor_value(text):
         return None
 
 
-# в”Ђв”Ђв”Ђ Log parser в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def parse_log(filepath):
-    """
-    Parse VITS trainer_0_log.txt.
-    Returns dict: metric_name -> list of values (at each logged GLOBAL_STEP).
-    """
     data = {}
     current_step = None
     current_metrics = {}
 
     with open(filepath, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
-            # Match GLOBAL_STEP line
             gs_match = re.search(r"GLOBAL_STEP:\s*(\d+)", line)
             if gs_match:
-                # Flush previous step
                 if current_step is not None and current_metrics:
                     for key, val in current_metrics.items():
                         if key not in data:
@@ -71,11 +57,9 @@ def parse_log(filepath):
                 current_metrics = {}
                 continue
 
-            # Match metric line:  | > metric_name: value  (avg_value)
             if current_step is not None and "| > " in line:
                 m = re.match(r"\s*\|\s*>\s*(\S+):\s*(.*?)\s*\(", line.strip())
                 if not m:
-                    # Try without parentheses (e.g. current_lr)
                     m2 = re.match(r"\s*\|\s*>\s*(\S+):\s*(.*?)\s*$", line.strip())
                     if m2:
                         key = m2.group(1)
@@ -90,7 +74,6 @@ def parse_log(filepath):
                 if val is not None:
                     current_metrics[key] = val
 
-    # Flush last step
     if current_step is not None and current_metrics:
         for key, val in current_metrics.items():
             if key not in data:
@@ -100,9 +83,7 @@ def parse_log(filepath):
     return data
 
 
-# в”Ђв”Ђв”Ђ Helpers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def fix_origin_zero(ax):
-    """Hide duplicate '0' tick label on X axis (origin already on Y)."""
     xticks = ax.get_xticks()
     labels = [str(int(l)) if l == int(l) else f"{l:.1g}" for l in xticks]
     if len(labels) > 1 and labels[0] == "0":
@@ -111,21 +92,18 @@ def fix_origin_zero(ax):
 
 
 def get_steps_per_epoch(data, step_col="current_lr_0"):
-    """Estimate steps per epoch from LR drops (StepLR halves LR)."""
     lrs = data.get(step_col, [])
     if not lrs:
-        return 205  # default for LJSpeech
+        return 205
 
-    # Find when LR drops (StepLR gamma=0.5)
     initial_lr = lrs[0]
     for i, lr in enumerate(lrs):
-        if lr < initial_lr * 0.9:  # drop detected
+        if lr < initial_lr * 0.9:
             return i + 1
     return 205
 
 
 def uniformize_series(data, keys):
-    """Trim all series to the same length."""
     lengths = [len(data.get(k, [])) for k in keys if k in data]
     if not lengths:
         return {}
@@ -137,7 +115,6 @@ def uniformize_series(data, keys):
     return result
 
 
-# в”Ђв”Ђв”Ђ Plot functions в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 COLORS = {
     "disc": "#e74c3c",
     "gen": "#3498db",
@@ -151,12 +128,10 @@ COLORS = {
 
 
 def make_line(ax, x, y, color, label, linewidth=1.5, alpha=0.9):
-    """Plot a line with proper styling."""
     ax.plot(x, y, color=color, linewidth=linewidth, alpha=alpha, label=label)
 
 
 def plot_losses(data, output_dir, steps_per_epoch):
-    """Plot generator and discriminator losses."""
     metrics = uniformize_series(data, ["loss_1", "loss_disc", "loss_gen",
                                         "loss_mel", "loss_kl", "loss_feat",
                                         "loss_duration"])
@@ -165,7 +140,6 @@ def plot_losses(data, output_dir, steps_per_epoch):
 
     x = np.arange(len(metrics.get("loss_1", []))) / steps_per_epoch
 
-    # в”Ђв”Ђ 1. Total losses в”Ђв”Ђ
     fig, ax = plt.subplots(figsize=(14, 6))
     if "loss_1" in metrics:
         make_line(ax, x, metrics["loss_1"], COLORS["gen"], "Generator total (loss_1)")
@@ -183,7 +157,6 @@ def plot_losses(data, output_dir, steps_per_epoch):
     fig.savefig(os.path.join(output_dir, "vits_01_total_loss.png"), dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-    # в”Ђв”Ђ 2. Generator sub-losses в”Ђв”Ђ
     fig, ax = plt.subplots(figsize=(14, 6))
     if "loss_gen" in metrics:
         make_line(ax, x, metrics["loss_gen"], COLORS["gen"], "Adversarial (loss_gen)")
@@ -206,7 +179,6 @@ def plot_losses(data, output_dir, steps_per_epoch):
     fig.savefig(os.path.join(output_dir, "vits_02_gen_losses.png"), dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-    # в”Ђв”Ђ 3. Mel loss (detail) в”Ђв”Ђ
     fig, ax = plt.subplots(figsize=(14, 6))
     if "loss_mel" in metrics:
         make_line(ax, x, metrics["loss_mel"], COLORS["mel"], "Mel loss")
@@ -227,7 +199,6 @@ def plot_losses(data, output_dir, steps_per_epoch):
 
 
 def plot_grad_norms(data, output_dir, steps_per_epoch):
-    """Plot discriminator and generator gradient norms."""
     metrics = uniformize_series(data, ["grad_norm_0", "grad_norm_1"])
     if not metrics:
         return
@@ -254,7 +225,6 @@ def plot_grad_norms(data, output_dir, steps_per_epoch):
 
 
 def plot_lr(data, output_dir, steps_per_epoch):
-    """Plot learning rates (discriminator and generator)."""
     metrics = uniformize_series(data, ["current_lr_0", "current_lr_1"])
     if not metrics:
         return
@@ -281,7 +251,6 @@ def plot_lr(data, output_dir, steps_per_epoch):
 
 
 def plot_timing(data, output_dir, steps_per_epoch):
-    """Plot step time and loader time."""
     metrics = uniformize_series(data, ["step_time", "loader_time"])
     if not metrics:
         return
@@ -308,7 +277,6 @@ def plot_timing(data, output_dir, steps_per_epoch):
 
 
 def plot_boxplots(data, output_dir):
-    """Boxplots for all numeric metrics."""
     skip_keys = {"step_time", "loader_time", "current_lr_0", "current_lr_1",
                  "loss_disc_real_0", "loss_disc_real_1", "loss_disc_real_2",
                  "loss_disc_real_3", "loss_disc_real_4", "loss_disc_real_5"}
@@ -317,7 +285,6 @@ def plot_boxplots(data, output_dir):
     if not plot_keys:
         return
 
-    # Select key metrics for the boxplot
     key_metrics = ["loss_1", "loss_disc", "loss_gen", "loss_mel", "loss_kl",
                    "loss_feat", "loss_duration", "grad_norm_0", "grad_norm_1"]
     plot_keys = [k for k in key_metrics if k in data]
@@ -346,7 +313,6 @@ def plot_boxplots(data, output_dir):
         axes[i].set_title(key.replace("_", " ").title(), fontsize=9)
         axes[i].set_ylabel("Value", fontsize=8)
 
-    # Hide empty subplots
     for i in range(n, len(axes)):
         axes[i].set_visible(False)
 
@@ -357,7 +323,6 @@ def plot_boxplots(data, output_dir):
 
 
 def generate_summary(data, steps_per_epoch, output_path):
-    """Generate text summary of VITS training."""
     lines = ["=" * 60, "VITS TRAINING SUMMARY", "=" * 60, ""]
 
     total_points = max(len(v) for v in data.values()) if data else 0
@@ -367,7 +332,6 @@ def generate_summary(data, steps_per_epoch, output_path):
     lines.append(f"Steps per epoch:     {steps_per_epoch}")
     lines.append("")
 
-    # Key metrics summary
     key_metrics = {
         "loss_1": "Generator Total Loss",
         "loss_disc": "Discriminator Loss",
@@ -400,7 +364,6 @@ def generate_summary(data, steps_per_epoch, output_path):
     print(f"  vits_training_summary.txt")
 
 
-# в”Ђв”Ђв”Ђ Main в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def main():
     parser = argparse.ArgumentParser(description="Plot VITS training logs")
     parser.add_argument("--log_dir", default="run/vits",
@@ -411,11 +374,9 @@ def main():
                         help="Override steps per epoch (auto-detected if not set)")
     args = parser.parse_args()
 
-    # Find log file
     import glob as globmod
     log_files = globmod.glob(os.path.join(args.log_dir, "*", "trainer_0_log.txt"))
     if not log_files:
-        # Try direct path
         if os.path.isfile(os.path.join(args.log_dir, "trainer_0_log.txt")):
             log_files = [os.path.join(args.log_dir, "trainer_0_log.txt")]
 
@@ -426,7 +387,6 @@ def main():
     log_file = log_files[0]
     print(f"Log file: {log_file}")
 
-    # Parse
     print("Parsing log...")
     data = parse_log(log_file)
 
@@ -434,17 +394,14 @@ def main():
     for key in sorted(data.keys()):
         print(f"  {key}: {len(data[key])} points")
 
-    # Steps per epoch
     if args.steps_per_epoch:
         spe = args.steps_per_epoch
     else:
         spe = get_steps_per_epoch(data)
     print(f"Steps per epoch: {spe}")
 
-    # Output dir
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Plot
     print("\nGenerating plots...")
     plot_losses(data, args.output_dir, spe)
     plot_grad_norms(data, args.output_dir, spe)
@@ -458,4 +415,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

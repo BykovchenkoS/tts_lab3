@@ -66,7 +66,6 @@ def compute_ssim_mel(ref, deg, sr=22050):
 
 
 def find_ljspeech_metadata(ljspeech_dir):
-    """Parse LJSpeech metadata.csv."""
     meta_path = os.path.join(ljspeech_dir, "metadata.csv")
     if not os.path.isfile(meta_path):
         print(f"[ERROR] metadata.csv not found at {meta_path}")
@@ -88,7 +87,6 @@ def find_ljspeech_metadata(ljspeech_dir):
 
 
 def synthesize_one(config_path, checkpoint_path, text, output_path):
-    """Synthesize a single sentence using TTS.bin.synthesize CLI."""
     cmd = [
         sys.executable, "-m", "TTS.bin.synthesize",
         "--model_path", checkpoint_path,
@@ -117,11 +115,9 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Find checkpoint and config
     checkpoint = os.path.join(args.model_run, "best_model.pth")
     config = os.path.join(args.model_run, "config.json")
     if not os.path.isfile(checkpoint):
-        # Try numbered checkpoint
         checkpoints = sorted(glob.glob(os.path.join(args.model_run, "checkpoint_*.pth")))
         if checkpoints:
             checkpoint = checkpoints[-1]
@@ -135,24 +131,20 @@ def main():
     print(f"Checkpoint: {checkpoint}")
     print(f"Config:     {config}")
 
-    # Load LJSpeech metadata
     entries = find_ljspeech_metadata(args.ljspeech_dir)
     if not entries:
         print("[ERROR] No LJSpeech entries found!")
         sys.exit(1)
     print(f"LJSpeech:   {len(entries)} entries")
 
-    # Select random samples
     random.seed(42)
     samples = random.sample(entries, min(args.n_samples, len(entries)))
     print(f"Selected:   {len(samples)} samples\n")
 
-    # Evaluate each
     results = []
     for i, sample in enumerate(samples):
         print(f"[{i+1}/{len(samples)}] {sample['id']}: {sample['text'][:60]}...")
 
-        # Synthesize
         synth_path = os.path.join(args.output_dir, f"synth_{sample['id']}.wav")
         ok = synthesize_one(config, checkpoint, sample["text"], synth_path)
         if not ok:
@@ -160,11 +152,9 @@ def main():
                             "pesq": None, "stoi": None, "ssim_mel": None})
             continue
 
-        # Load both
         ref_wav = load_audio(sample["wav"])
         synth_wav = load_audio(synth_path)
 
-        # Compute metrics
         pesq = compute_pesq(ref_wav, synth_wav)
         stoi = compute_stoi(ref_wav, synth_wav)
         ssim = compute_ssim_mel(ref_wav, synth_wav)
@@ -185,7 +175,6 @@ def main():
             "ssim_mel": ssim,
         })
 
-    # Summary
     print(f"\n{'=' * 60}")
     print(f" SUMMARY — Tacotron 2 vs LJSpeech Reference")
     print(f"{'=' * 60}")
@@ -197,7 +186,6 @@ def main():
             print(f"{label:<12} {np.mean(vals):>8.4f} {np.std(vals):>8.4f} {np.min(vals):>8.4f} {np.max(vals):>8.4f}")
     print(f"{'=' * 60}")
 
-    # Interpretation
     print("\nInterpretation:")
     pesq_vals = [r["pesq"] for r in results if r.get("pesq") is not None]
     stoi_vals = [r["stoi"] for r in results if r.get("stoi") is not None]
@@ -222,7 +210,6 @@ def main():
         else:
             print(f"  STOI = {avg:.2f} — Poor intelligibility")
 
-    # Save results
     results_file = args.results_file or os.path.join(args.output_dir, "eval_results.json")
     os.makedirs(os.path.dirname(results_file), exist_ok=True)
     with open(results_file, "w", encoding="utf-8") as f:

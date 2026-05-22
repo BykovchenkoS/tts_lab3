@@ -6,10 +6,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def find_checkpoint(output_dir):
-    """Find the latest best_model.pth in the run directory."""
-    # First check subdirectories (training creates a dated subfolder)
     for root, dirs, files in os.walk(output_dir):
-        # Sort dirs by name descending to get latest first
         dirs.sort(reverse=True)
         for f in files:
             if f == "best_model.pth":
@@ -18,7 +15,6 @@ def find_checkpoint(output_dir):
 
 
 def find_config_for_checkpoint(checkpoint_path):
-    """Find the config.json next to the checkpoint (saved during training)."""
     checkpoint_dir = os.path.dirname(checkpoint_path)
     config_in_run = os.path.join(checkpoint_dir, "config.json")
     if os.path.isfile(config_in_run):
@@ -27,7 +23,6 @@ def find_config_for_checkpoint(checkpoint_path):
 
 
 def synthesize_one(model_name, config_path, checkpoint_path, text, output_file):
-    """Synthesize a single text using TTS.bin.synthesize CLI."""
     cmd = [
         sys.executable, "-m", "TTS.bin.synthesize",
         "--model_path", checkpoint_path,
@@ -41,7 +36,6 @@ def synthesize_one(model_name, config_path, checkpoint_path, text, output_file):
 
 
 def synthesize_model(model_name):
-    """Synthesize speech with a specific model."""
     print(f"\n{'=' * 60}")
     print(f"  Synthesizing: {model_name.upper()}")
     print(f"{'=' * 60}")
@@ -52,19 +46,16 @@ def synthesize_model(model_name):
 
     os.makedirs(synth_dir, exist_ok=True)
 
-    # Find checkpoint
     checkpoint = find_checkpoint(output_model_dir)
     if checkpoint is None:
         print(f"[ERROR] No best_model.pth found in {output_model_dir}")
         return 1
 
-    # Find config next to the checkpoint (most reliable)
     config_path = find_config_for_checkpoint(checkpoint)
     if config_path is None:
         print(f"[ERROR] No config.json found next to checkpoint: {checkpoint}")
         return 1
 
-    # Read test texts
     if not os.path.isfile(text_file):
         print(f"[ERROR] Text file not found: {text_file}")
         return 1
@@ -94,7 +85,6 @@ def synthesize_model(model_name):
 
 
 def main():
-    # Parse args manually (no argparse needed for simple --model/--text)
     model = "both"
     custom_text = None
 
@@ -114,7 +104,6 @@ def main():
         print(f"[ERROR] --model must be tacotron2, vits, or both (got: {model})")
         return 1
 
-    # Write custom text if provided
     if custom_text is not None:
         text_file = os.path.join(PROJECT_ROOT, "tts_test_text.txt")
         with open(text_file, "w", encoding="utf-8") as f:

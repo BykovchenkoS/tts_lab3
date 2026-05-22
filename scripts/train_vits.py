@@ -16,7 +16,6 @@ def main():
                         help="Path to previous run to resume training from")
     args = parser.parse_args()
 
-    # Paths
     config_path = os.path.join(PROJECT_ROOT, "config", "vits_run_config.json")
     default_config = os.path.join(PROJECT_ROOT, "config", "vits_default.json")
     dataset_path = os.path.join(PROJECT_ROOT, "data", "raw", "LJSpeech-1.1")
@@ -25,28 +24,23 @@ def main():
     os.makedirs(os.path.dirname(config_path), exist_ok=True)
     os.makedirs(output_path, exist_ok=True)
 
-    # Check dataset
     if not os.path.isdir(dataset_path):
         print(f"[ERROR] Dataset not found: {dataset_path}")
         print("        Run  python scripts/prepare_data.py  first!")
         return 1
 
-    # ---- Generate default config if needed ----
     if not os.path.isfile(default_config):
         print("[INFO] Generating default VITS config...")
         from TTS.tts.configs.vits_config import VitsConfig
         VitsConfig().save_json(default_config)
 
-    # ---- Load config, modify via Python object, save ----
     from TTS.config import load_config
 
     config = load_config(default_config)
 
-    # Override fields using Python attributes (types stay correct)
     config.run_name = "vits_ljspeech"
     config.output_path = output_path
 
-    # Dataset — override the list directly
     config.datasets = [{
         "formatter": "ljspeech",
         "path": dataset_path,
@@ -56,13 +50,11 @@ def main():
         "phonemizer": "espeak",
     }]
 
-    # Dataloader
     config.batch_size = args.batch_size
     config.eval_batch_size = args.batch_size
     config.num_loader_workers = 4
     config.num_eval_loader_workers = 0
 
-    # Training schedule
     config.epochs = args.epochs
     config.test_eval_epochs = 10
     config.print_step = 25
@@ -70,7 +62,6 @@ def main():
     config.save_step = max(1, args.epochs // 10)
     config.checkpoint = True
 
-    # Early stopping
     try:
         config.eval_avg_loss_epochs = 2
         config.early_stop_patience = 50
@@ -78,26 +69,21 @@ def main():
     except AttributeError:
         pass
 
-    # Optimizer (generator)
     config.optimizer = "AdamW"
     config.lr = 2e-4
     step_size = max(1, args.epochs // 3)
     config.lr_scheduler = "StepLR"
     config.lr_scheduler_params = {"step_size": step_size, "gamma": 0.5}
 
-    # Optimizer (discriminator)
     config.lr_disc = 2e-4
     config.lr_scheduler_disc = "StepLR"
     config.lr_scheduler_disc_params = {"step_size": step_size, "gamma": 0.5}
 
-    # Regularisation (НЕ трогай grad_clip — ломает coqpit сериализацию у VITS!)
     config.cudnn_benchmark = False
     config.seed = 54321
 
-    # Speaker
     config.use_speaker_embedding = False
 
-    # Logging
     config.logger = "tensorboard"
     config.tb_log_step = 50
     try:
@@ -105,10 +91,8 @@ def main():
     except AttributeError:
         pass
 
-    # Save config using coqpit's own method (preserves types)
     config.save_json(config_path)
 
-    # ---- Header ----
     print("=" * 60)
     print("  VITS Training  -  Coqui TTS")
     print("=" * 60)
@@ -121,7 +105,6 @@ def main():
     print(f"  TensorBoard: tensorboard --logdir {output_path}")
     print("=" * 60)
 
-    # ---- Launch training ----
     cmd = [
         sys.executable, "-m", "TTS.bin.train_tts",
         "--config_path", config_path,
